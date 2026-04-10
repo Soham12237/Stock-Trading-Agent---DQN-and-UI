@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RL Trading Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:       #0a0c10;
+    --surface:  #111318;
+    --border:   #1e2229;
+    --accent:   #00ff88;
+    --accent2:  #ff4d6d;
+    --accent3:  #ffd166;
+    --text:     #e8eaf0;
+    --muted:    #555b68;
+    --buy:      #00ff88;
+    --sell:     #ff4d6d;
+    --hold:     #ffd166;
+    --radius:   6px;
+    --mono:     'Space Mono', monospace;
+    --display:  'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── HEADER ── */
+  header {
+    width: 100%;
+    border-bottom: 1px solid var(--border);
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo {
+    font-family: var(--display);
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); }
+  #model-badge {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #model-badge .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  #model-badge .dot.live { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  /* ── MAIN LAYOUT ── */
+  main {
+    width: 100%;
+    max-width: 960px;
+    padding: 40px 20px 60px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  /* ── PANEL ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+  }
+  .panel-title {
+    font-family: var(--display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+
+  /* ── FORM ── */
+  .field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .field input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .field input::placeholder { color: var(--muted); }
+
+  /* ── COMPUTED INDICATORS ── */
+  .computed-note {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(0,255,136,0.04);
+    border: 1px solid rgba(0,255,136,0.12);
+    border-radius: var(--radius);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .computed-note strong { color: var(--accent); }
+
+  /* ── SUBMIT ── */
+  #submit-btn {
+    margin-top: 20px;
+    width: 100%;
+    padding: 14px;
+    background: var(--accent);
+    color: #000;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 1px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  #submit-btn:hover { opacity: 0.88; }
+  #submit-btn:active { transform: scale(0.98); }
+  #submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── RESULT PANEL ── */
+  .result-panel {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Decision card */
+  #decision-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    transition: border-color 0.4s;
+    position: relative;
+    overflow: hidden;
+  }
+  #decision-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.4s;
+    pointer-events: none;
+  }
+  #decision-card.BUY  { border-color: var(--buy);  }
+  #decision-card.BUY::before  { background: radial-gradient(ellipse at 50% 0%, rgba(0,255,136,0.08) 0%, transparent 70%); opacity: 1; }
+  #decision-card.SELL { border-color: var(--sell); }
+  #decision-card.SELL::before { background: radial-gradient(ellipse at 50% 0%, rgba(255,77,109,0.08) 0%, transparent 70%); opacity: 1; }
+  #decision-card.HOLD { border-color: var(--hold); }
+  #decision-card.HOLD::before { background: radial-gradient(ellipse at 50% 0%, rgba(255,209,102,0.08) 0%, transparent 70%); opacity: 1; }
+
+  #decision-label {
+    font-family: var(--display);
+    font-size: 56px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    color: var(--muted);
+    transition: color 0.4s;
+  }
+  #decision-card.BUY  #decision-label { color: var(--buy);  }
+  #decision-card.SELL #decision-label { color: var(--sell); }
+  #decision-card.HOLD #decision-label { color: var(--hold); }
+
+  #decision-sub {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Q-values bar chart */
+  .q-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+  }
+  .q-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 18px;
+  }
+  .q-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .q-label {
+    width: 36px;
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .q-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .q-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  .q-bar-fill.hold { background: var(--hold); }
+  .q-bar-fill.buy  { background: var(--buy); }
+  .q-bar-fill.sell { background: var(--sell); }
+  .q-val {
+    width: 60px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+
+  /* Log */
+  .log-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 28px;
+  }
+  .log-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  #log-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  #log-list::-webkit-scrollbar { width: 4px; }
+  #log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .log-entry {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    animation: fadeSlide 0.3s ease;
+  }
+  .log-entry .ts { color: var(--border); flex-shrink: 0; }
+  .log-entry .act { font-weight: 700; }
+  .log-entry .act.BUY  { color: var(--buy); }
+  .log-entry .act.SELL { color: var(--sell); }
+  .log-entry .act.HOLD { color: var(--hold); }
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Error */
+  #error-msg {
+    display: none;
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: rgba(255,77,109,0.08);
+    border: 1px solid rgba(255,77,109,0.3);
+    border-radius: var(--radius);
+    font-size: 12px;
+    color: var(--sell);
+  }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(0,0,0,0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Responsive */
+  @media (max-width: 680px) {
+    main { grid-template-columns: 1fr; }
+    .result-panel { grid-column: 1; grid-row: auto; }
+    header { padding: 14px 20px; }
+    .field-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">RL<span>Trade</span></div>
+  <div id="model-badge">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">checking model…</span>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: Input + computed info -->
+  <div style="display:flex;flex-direction:column;gap:20px;">
+    <div class="panel">
+      <div class="panel-title">Market State Input</div>
+      <div class="field-grid">
+        <div class="field">
+          <label>Close Price</label>
+          <input type="number" id="close" placeholder="e.g. 182.50" step="0.01"/>
+        </div>
+        <div class="field">
+          <label>SMA (10-period)</label>
+          <input type="number" id="sma" placeholder="e.g. 179.30" step="0.01"/>
+        </div>
+        <div class="field">
+          <label>EMA (10-period)</label>
+          <input type="number" id="ema" placeholder="e.g. 180.10" step="0.01"/>
+        </div>
+        <div class="field">
+          <label>RSI (14-period)</label>
+          <input type="number" id="rsi" placeholder="0–100" min="0" max="100" step="0.1"/>
+        </div>
+        <div class="field">
+          <label>Balance ($)</label>
+          <input type="number" id="balance" placeholder="e.g. 10000" step="0.01"/>
+        </div>
+        <div class="field">
+          <label>Shares Held</label>
+          <input type="number" id="shares" placeholder="e.g. 5" min="0" step="1"/>
+        </div>
+      </div>
+
+      <div class="computed-note">
+        <strong>SMA / EMA / RSI</strong> are technical indicators computed from historical data.
+        
+      </div>
+
+      <button id="submit-btn" onclick="predict()">Ask the Agent</button>
+      <div id="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results -->
+  <div class="result-panel">
+    <div id="decision-card">
+      <div id="decision-label">—</div>
+      <div id="decision-sub">awaiting input</div>
+    </div>
+
+    <div class="q-panel">
+      <div class="q-title">Q-Values (confidence per action)</div>
+      <div class="q-row">
+        <div class="q-label">HOLD</div>
+        <div class="q-bar-track"><div class="q-bar-fill hold" id="q-hold"></div></div>
+        <div class="q-val" id="qv-hold">—</div>
+      </div>
+      <div class="q-row">
+        <div class="q-label">BUY</div>
+        <div class="q-bar-track"><div class="q-bar-fill buy" id="q-buy"></div></div>
+        <div class="q-val" id="qv-buy">—</div>
+      </div>
+      <div class="q-row">
+        <div class="q-label">SELL</div>
+        <div class="q-bar-track"><div class="q-bar-fill sell" id="q-sell"></div></div>
+        <div class="q-val" id="qv-sell">—</div>
+      </div>
+    </div>
+
+    <div class="log-panel">
+      <div class="log-title">Decision Log</div>
+      <ul id="log-list">
+        <li class="log-entry"><span class="ts">--:--:--</span><span>No predictions yet</span></li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<script>
+  // ── Model health check ──
+  async function checkModel() {
+    try {
+      const r = await fetch('/model-info');
+      if (r.ok) {
+        const d = await r.json();
+        document.getElementById('status-dot').classList.add('live');
+        document.getElementById('status-text').textContent =
+          `model loaded · ε=${d.epsilon} · states=${d.state_size}`;
+      } else {
+        throw new Error();
+      }
+    } catch {
+      document.getElementById('status-text').textContent = 'model not found — run train.py';
+    }
+  }
+  checkModel();
+
+  // ── Predict ──
+  async function predict() {
+    const ids = ['close','sma','ema','rsi','balance','shares'];
+    const payload = {};
+    const errEl = document.getElementById('error-msg');
+    errEl.style.display = 'none';
+
+    for (const id of ids) {
+      const val = document.getElementById(id).value.trim();
+      if (val === '') {
+        showError(`Please fill in: ${id.toUpperCase()}`);
+        return;
+      }
+      payload[id] = parseFloat(val);
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Querying…';
+
+    try {
+      const res = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) { showError(data.error || 'Server error'); return; }
+      renderResult(data, payload);
+    } catch (e) {
+      showError('Could not reach Flask server. Is app.py running on port 5000?');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Ask the Agent';
+    }
+  }
+
+  function renderResult({ label, q_values }, payload) {
+    // Decision card
+    const card = document.getElementById('decision-card');
+    card.className = label;
+    document.getElementById('decision-label').textContent = label;
+    document.getElementById('decision-sub').textContent =
+      label === 'BUY'  ? 'The agent recommends buying a share.' :
+      label === 'SELL' ? 'The agent recommends selling a share.' :
+                         'The agent recommends holding position.';
+
+    // Q-value bars
+    const vals = q_values;
+    const shift = Math.min(...vals);          // shift so all ≥ 0
+    const shifted = vals.map(v => v - shift);
+    const maxV = Math.max(...shifted, 1e-9);
+
+    const ids = ['q-hold','q-buy','q-sell'];
+    const txtIds = ['qv-hold','qv-buy','qv-sell'];
+    ids.forEach((id, i) => {
+      document.getElementById(id).style.width = ((shifted[i] / maxV) * 100) + '%';
+      document.getElementById(txtIds[i]).textContent = vals[i].toFixed(4);
+    });
+
+    // Log entry
+    const now = new Date().toLocaleTimeString('en-GB');
+    const li = document.createElement('li');
+    li.className = 'log-entry';
+    li.innerHTML = `
+      <span class="ts">${now}</span>
+      <span class="act ${label}">${label}</span>
+      <span>@ close=${payload.close} | bal=${payload.balance} | shares=${payload.shares}</span>`;
+    const logList = document.getElementById('log-list');
+    if (logList.children.length === 1 && logList.firstElementChild.querySelector('.ts')?.textContent === '--:--:--') {
+      logList.innerHTML = '';
+    }
+    logList.prepend(li);
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = '⚠ ' + msg;
+    el.style.display = 'block';
+    document.getElementById('submit-btn').disabled = false;
+    document.getElementById('submit-btn').textContent = 'Ask the Agent';
+  }
+
+  // Allow Enter key to submit
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') predict();
+  });
+</script>
+</body>
+</html>
